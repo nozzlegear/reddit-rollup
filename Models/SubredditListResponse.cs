@@ -32,7 +32,7 @@ namespace reddit_rollup.Models
 
         public object banned_by { get; set; }
 
-        public MediaEmbed media_embed { get; set; }
+        public object media_embed { get; set; }
 
         public string subreddit { get; set; }
 
@@ -54,7 +54,7 @@ namespace reddit_rollup.Models
 
         public int? gilded { get; set; }
 
-        public SecureMediaEmbed secure_media_embed { get; set; }
+        public object secure_media_embed { get; set; }
 
         public bool? clicked { get; set; }
 
@@ -135,6 +135,49 @@ namespace reddit_rollup.Models
         public string subreddit_type { get; set; }
 
         public int? ups { get; set; }
+
+        public Preview preview { get; set; }
+    }
+
+    public class Preview 
+    {
+        public IEnumerable<Image> images { get; set; }
+
+        public bool enabled { get; set; }
+    }
+
+    public class Image : Media
+    {
+        public Variant variants { get; set; }
+        
+        public string id { get; set; }
+    }
+
+    public class Media 
+    {
+        public MediaSource source { get; set; }
+        
+        public List<MediaSource> resolutions { get; set; }
+    }
+
+    public class MediaSource
+    {
+        public string url { get; set; }
+        
+        public int width { get; set; }
+        
+        public int height { get; set; }
+    }
+
+    public class Variant
+    {
+        public Media obfuscated { get; set; }
+        
+        public Media nsfw { get; set; }
+        
+        public Media gif { get; set; }
+        
+        public Media mp4 { get; set; }
     }
 
     public class MediaEmbed

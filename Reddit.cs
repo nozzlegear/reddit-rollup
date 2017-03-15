@@ -9,76 +9,33 @@ namespace reddit_rollup
 {
     class Reddit
     {
-        private string CLIENT_SECRET { get; set; }
+        private string SWU_KEY { get; set; }
 
-        private string CLIENT_ID { get; set; }
-
-        private string USERNAME { get; set; }
-
-        private string PASSWORD { get; set; }
+        private string SWU_TEMPLATE_ID { get; set; }
 
         private const string BASE_PATH = "https://www.reddit.com/";
 
         public Reddit()
         {
-            CLIENT_SECRET = Environment.GetEnvironmentVariable("REDDIT_ROLLUP_SECRET");
-            CLIENT_ID = Environment.GetEnvironmentVariable("REDDIT_ROLLUP_CLIENT_ID");
-            USERNAME = Environment.GetEnvironmentVariable("REDDIT_ROLLUP_USERNAME");
-            PASSWORD = Environment.GetEnvironmentVariable("REDDIT_ROLLUP_PASSWORD");
-        }
+            string keyVarName = "REDDIT_ROLLUP_SWU_KEY";
+            string templateVarName = "REDDIT_ROLLUP_SWU_TEMPLATE_ID";
 
-        private IFlurlClient ConfigureRequest(string path, string accessToken = null)
-        {
-            IFlurlClient client = new FlurlClient().AllowAnyHttpStatus();
+            SWU_KEY = Environment.GetEnvironmentVariable(keyVarName);
+            SWU_TEMPLATE_ID = Environment.GetEnvironmentVariable(templateVarName);
 
-            if (! string.IsNullOrEmpty(accessToken))
+            if (string.IsNullOrEmpty(SWU_KEY))
             {
-                client = client.WithOAuthBearerToken(accessToken);
+                throw new Exception($"{keyVarName} was not found in environment variables.");
             }
-            else 
+            else if (string.IsNullOrEmpty(SWU_TEMPLATE_ID))
             {
-                client = client.WithBasicAuth(CLIENT_ID, CLIENT_SECRET);
-            }
-
-            return Flurl.Url.Combine(BASE_PATH, path).WithClient(client);
-        }
-
-        public async Task<string> GetAccessToken()
-        {
-            // 1. Make a request to https://www.reddit.com/api/v1/access_token?grant_type=client_credentials
-            // 2. Use basic auth to send client_id as the username and client_secret as the password.
-            // 3. Receive a response with the following JSON:
-            // {
-            //     "access_token": Your access token,
-            //     "token_type": "bearer",
-            //     "expires_in": Unix Epoch Seconds,
-            //     "scope": A scope string,
-            // }
-            // 4. This type of access token never receives a refresh token. Not sure if that means they never expire, or you just can't refresh and must create another.
-
-            using (var client = ConfigureRequest("api/v1/access_token"))
-            {
-                var request = client.PostUrlEncodedAsync(new
-                {
-                    grant_type = "password",
-                    username= USERNAME,
-                    password = PASSWORD,
-                });
-                var result = await request;
-
-                result.EnsureSuccessStatusCode();
-
-                var body = await request.ReceiveJson<AccessTokenGrantResponse>();
-                
-                Console.WriteLine($"Received access token result. Token: {body.access_token}. Expires: {body.expires_in}.");
-
-                return body.access_token;
+                throw new Exception($"{SWU_TEMPLATE_ID} was not found in environment variables.");
             }
         }
 
-        public async Task<IEnumerable<PostData>> GetTopPostsForSubreddit(string token, string subreddit, int count = 3) 
+        public async Task<IEnumerable<PostData>> GetTopPostsForSubreddit(string subreddit, int count = 3) 
         {
-            using (var client = ConfigureRequest($"r/{subreddit}/top.json?sort=top&t=day"))
+            using (var client = Flurl.Url.Combine(BASE_PATH, $"r/{subreddit}/top.json?sort=top&t=day").AllowAnyHttpStatus())
             {
                 var request = client.GetAsync();
                 var result = await request;
@@ -93,22 +50,77 @@ namespace reddit_rollup
 
         public string GetPostHtml(PostData post)
         {
+            string body = System.Net.WebUtility.HtmlDecode(post.selftext_html);
+
+            if (post.preview != null && post.preview.images?.Count() > 0)
+            {
+                var preview = post.preview.images.First();
+                var image = preview.resolutions.FirstOrDefault(i => i.height < 700 && i.height > 300) ?? preview.source;
+
+                body = $"<a href='{post.url}' target='_blank'><img alt='{post.title}' src='{image.url}' /></a>";
+            }
+            else if (! string.IsNullOrEmpty(post.thumbnail) && post.thumbnail != "self")
+            {
+                body = $"<a href='{post.url}' target='_blank'><img alt='{post.title}' src='{post.thumbnail}' /></a>";
+            }
+
             var s = $@"
                 <div class='post'>
                     <p>
-                        <a href='https://www.reddit.com/{post.subreddit_name_prefixed}' target='_blank'>
+                        <a href='https://m.reddit.com/{post.subreddit_name_prefixed}' target='_blank'>
                             <strong>{post.subreddit_name_prefixed}:</strong>
                         </a>
-                        <a href='{post.url}'>
+                        <a href='https://m.reddit.com/{post.permalink}'>
                             {post.title}
                         </a>
                     </p>
-                    {System.Net.WebUtility.HtmlDecode(post.selftext_html)}
+                    {body}
                     <hr />
                 </div>
             ";
 
             return s;
+        }
+
+        public async Task<SendWithUsResponse> SendEmail(string html, string subject)
+        {
+            var request = "https://api.sendwithus.com/api/v1/send"
+                .AllowAnyHttpStatus()
+                .WithHeader("X-SWU-API-KEY", SWU_KEY)
+                .PostJsonAsync(new SendWithUsData()
+                {
+                    EmailId = SWU_TEMPLATE_ID,
+                    Recipient = new Email()
+                    {
+                        Name = "Joshua Harms",
+                        Address = "nozzlegear@outlook.com",
+                    },
+                    Sender = new Email()
+                    {
+                        Name = "Reddit Rollup",
+                        Address = "reddit-rollup@nozzlegear.com",
+                        ReplyTo = "reddit-rollup@nozzlegear.com",
+                    },
+                    EmailData = new RollupEmailData(html, subject),
+                });
+            var result = await request;
+
+            try 
+            {
+                result.EnsureSuccessStatusCode();
+            } catch (Exception e)
+            {
+                var output = new SendWithUsResponse()
+                {   
+                    Status = result.StatusCode.ToString(),
+                    Success = false,
+                    ErrorMessage = $"SendWithUs API request failed with {result.StatusCode} {result.ReasonPhrase}. {e.Message}",
+                };
+
+                return output;
+            }
+
+            return await request.ReceiveJson<SendWithUsResponse>();
         }
     }
 }
