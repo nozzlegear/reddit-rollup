@@ -31,7 +31,7 @@ namespace reddit_rollup
                     "politicaldiscussion", 
                     "wholesomememes", 
                     "asmr",
-                    "birbs", 
+                    "prequelmemes",
                     "thecompletionist", 
                     "warcraftlore", 
                     "halostory", 
