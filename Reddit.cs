@@ -13,7 +13,7 @@ namespace reddit_rollup
 
         private string SWU_TEMPLATE_ID { get; set; }
 
-        private const string BASE_PATH = "https://www.reddit.com/";
+        private const string BASE_PATH = "https://www.reddit.com";
 
         public Reddit()
         {
