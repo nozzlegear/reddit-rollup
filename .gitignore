@@ -1,5 +1,15 @@
 bin/
 obj/
+packages/
+
+# Paket files 
+.paket/paket.exe 
+.paket/Paket.targets 
 
 # Vim temp files
 *~
+
+# Env files 
+.env 
+.env.live 
+.env.dev
